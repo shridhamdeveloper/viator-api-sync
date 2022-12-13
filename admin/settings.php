@@ -3,7 +3,8 @@
  * Function to add menus to wordpress dashboard
  * **/
 require_once VIATORAS_PLUGIN_DIR.'admin/viator_admin_subpages.php';
-require_once VIATORAS_PLUGIN_DIR.'admin/viator_admin_csv.php';
+require_once VIATORAS_PLUGIN_DIR.'admin/viator_api_sync_class.php';
+require_once VIATORAS_PLUGIN_DIR.'admin/viator_woocommerce_class.php';
 
 add_action('admin_enqueue_scripts', 'vas_admin_script_and_styles');
 function vas_admin_script_and_styles()
@@ -45,8 +46,8 @@ if(!function_exists('vas_options_setting')){
 		       				update_option('vas_data', $vas_data);
 							echo '<div class="notice notice-success is-dismissible"><p>' . __('<b>File uploaded successfully</b>', 'viator_api_sync') . '</p></div>';
 
-							$csv_class_obj = new Viator_Admin_Csv();
-							$csv_class_obj->vas_get_csv_file_data();
+							$vasc_obj = new Viator_Api_Sync_Class();
+							$vasc_obj->vas_get_csv_file_data();
 					    }
 					}else{
 						echo '<div class="notice notice-error is-dismissible"><p>' . __('<b>Kindly upload CSV file only.</b>', 'viator_api_sync') . '</p></div>';
@@ -73,5 +74,7 @@ if(!function_exists('vas_options_setting')){
 			</form>
 		</div>	
 	<?php
+	$vasc_obj = new Viator_Api_Sync_Class();
+	$vasc_obj->vas_get_csv_file_data();
 	}
 }
