@@ -46,8 +46,7 @@ if(!function_exists('vas_options_setting')){
 		       				update_option('vas_data', $vas_data);
 							echo '<div class="notice notice-success is-dismissible"><p>' . __('<b>File uploaded successfully</b>', 'viator_api_sync') . '</p></div>';
 
-							$vasc_obj = new Viator_Api_Sync_Class();
-							$vasc_obj->vas_get_csv_file_data();
+							vas_get_csv_file_data();
 					    }
 					}else{
 						echo '<div class="notice notice-error is-dismissible"><p>' . __('<b>Kindly upload CSV file only.</b>', 'viator_api_sync') . '</p></div>';
@@ -74,7 +73,6 @@ if(!function_exists('vas_options_setting')){
 			</form>
 		</div>	
 	<?php
-	$vasc_obj = new Viator_Api_Sync_Class();
-	$vasc_obj->vas_get_csv_file_data();
+	vas_get_csv_file_data();
 	}
 }

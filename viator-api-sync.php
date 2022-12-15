@@ -10,8 +10,8 @@
 // Exit if accessed directly
 if(!defined('ABSPATH')) exit;
 
-// ini_set('display_errors', true);
-// error_reporting(E_ALL);
+ini_set('display_errors', true);
+error_reporting(E_ALL);
 define('VIATORAS_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('VIATORAS_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('VIATORAS_MAIN_PLUGIN_DIR', plugin_dir_url(__DIR__));
