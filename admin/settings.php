@@ -73,6 +73,6 @@ if(!function_exists('vas_options_setting')){
 			</form>
 		</div>	
 	<?php
-	vas_get_csv_file_data();
+	// vas_get_csv_file_data();
 	}
 }

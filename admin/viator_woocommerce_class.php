@@ -16,6 +16,7 @@ function vas_add_external_product($product_details)
     $external_product->set_description($product_details['description']);
     $external_product->set_product_url($product_details['productUrl']);
     $external_product->set_button_text('Book On Viator');
+    $external_product->set_category_ids($product_details['categoryId']);
     // $external_product->set_image_id("https://media.tacdn.com/media/attractions-splice-spp-674x446/07/47/d9/70.jpg");
     $external_product->save();
     if(isset($product_details['images']) && !empty($product_details['images'])){

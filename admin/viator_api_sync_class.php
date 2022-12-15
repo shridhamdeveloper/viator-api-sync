@@ -79,6 +79,7 @@ function vas_fetch_product_details($product_code)
 		$method = 'products/'.$product_code;
 		$url = VAS_API_END_POINT.$method;
 		$product_response = vas_wp_http_methods($url, 'GET');
+		// $product_response = file_get_contents('D:/Shrikant/Magzine3-Technology/Office-material/viator/viator-product-details-response.json');
 		$product_response = json_decode($product_response, true);
 		if(isset($product_response['status']) && $product_response['status'] == 'ACTIVE'){
 			$product_details = vas_format_product_response($product_response);
@@ -124,8 +125,6 @@ function vas_wp_http_methods($url, $type='GET',$request_data='')
 
 	if(!empty($response)){
 		$response = gzdecode($response);
-		// echo "<pre>response===== "; print_r($response); die;
-		// $response = file_get_contents('D:/Shrikant/Magzine3-Technology/Office-material/viator/viator-product-details-response.json');
 	}
 	return $response;
 }
@@ -144,5 +143,166 @@ function vas_format_product_response($product_details)
 	$formatted_response['productCode'] = isset($product_details['productCode'])?$product_details['productCode']:'';
 	$formatted_response['productUrl'] = isset($product_details['productUrl'])?$product_details['productUrl']:'';
 	$formatted_response['images'] = isset($product_details['images'])?$product_details['images']:'';
+	$formatted_response['destinationId'] = isset($product_details['destinations'][0])?$product_details['destinations'][0]['ref']:'';
+
+	$product_categories = array(); $sub_term_details = array(); $parent_term_details = array();
+	// Get destination details from Database Table
+	if(isset($formatted_response['destinationId']) && !empty($formatted_response['destinationId'])){	
+		$destination_details = vas_get_destination_details($formatted_response['destinationId']);
+		if(empty($destination_details)){
+			vas_fetch_viator_destination_details_from_api();
+			$destination_details = vas_get_destination_details($formatted_response['destinationId']);
+		}
+		if(!empty($destination_details)){
+			$sub_term_details = get_term_by('name',$destination_details['destinationName'],'product_cat');
+			$parent_dest_details = vas_get_destination_parent_details($destination_details['parentId']);
+			if(!empty($parent_dest_details)){
+				$parent_term_details = get_term_by('name',$parent_dest_details['destinationName'],'product_cat');
+			}
+
+
+			if(!$parent_term_details){
+				$category_slug = 'vas-parent-cat-'. strtolower($parent_dest_details['destinationName']);
+				wp_insert_term( $parent_dest_details['destinationName'], 'product_cat', array(
+				    'description' => 'Country', 
+				    'parent' => 0,
+				    'slug' => $category_slug
+				) );
+
+				$parent_term_details = get_term_by('name',$parent_dest_details['destinationName'],'product_cat');
+			}
+
+			if(!$sub_term_details){
+				$category_slug = 'vas-sub-cat-'. strtolower($destination_details['destinationName']);
+				wp_insert_term( $destination_details['destinationName'], 'product_cat', array(
+				    'description' => 'City', 
+				    'parent' => isset($parent_term_details->term_id)?$parent_term_details->term_id:0 ,
+				    'slug' => $category_slug
+				) );
+
+				$sub_term_details = get_term_by('name',$destination_details['destinationName'],'product_cat');
+			}	
+		}	
+	} 
+
+	if(!empty($parent_term_details) && $sub_term_details){
+		$product_categories[] = $parent_term_details->term_id; 
+		$product_categories[] = $sub_term_details->term_id; 
+	}else if(!empty($parent_term_details) && empty($sub_term_details)){
+		$product_categories[] = $parent_term_details->term_id;
+	}
+	else if(empty($parent_term_details) && !empty($sub_term_details)){
+		$product_categories[] = $sub_term_details->term_id;
+	}
+	$formatted_response['categoryId'] = $product_categories;
 	return $formatted_response;	
+}
+
+/** 
+ * Check for existing destional details, if destionation doesn't exist the create new table
+ * @arguments
+ * destionation_id: Destionation id to get the details
+ */
+function vas_get_destination_details($destination_id='')
+{
+	global $table_prefix; global $wpdb; $destination_details = array();
+	if(!empty($destination_id)){
+		$table_name = $table_prefix."vas_api_destinations";
+		$query = "SELECT * FROM $table_name WHERE destinationId=$destination_id";
+		$destination_results = $wpdb->get_results($query, ARRAY_A);
+		if(!empty($destination_results)){
+			$destination_details['parentId'] = $destination_results[0]['parentId'];
+			$destination_details['destinationName'] = $destination_results[0]['destinationName'];
+			$destination_details['destinationType'] = $destination_results[0]['destinationType'];
+			$destination_details['destinationId'] = $destination_results[0]['destinationId'];
+		}else{
+			$charset_collate = $wpdb->get_charset_collate();
+			$sql = "CREATE TABLE IF NOT EXISTS `$table_name` (
+				id INT(11) NOT NULL AUTO_INCREMENT , 
+				sortOrder INT(11) NULL , 
+				selectable TINYINT NOT NULL DEFAULT '0' , 
+				destinationUrlName VARCHAR(255) NULL , 
+				defaultCurrencyCode VARCHAR(255) NULL , 
+				lookupId VARCHAR(255) NULL , 
+				parentId INT(255) NOT NULL DEFAULT '0' , 
+				timeZone VARCHAR(255) NULL , 
+				destinationName VARCHAR(255) NOT NULL , 
+				destinationId INT(11) NOT NULL DEFAULT '0' , 
+				destinationType VARCHAR(255) NULL , 
+				latitude VARCHAR(255) NULL , 
+				longitude VARCHAR(255) NOT NULL , PRIMARY KEY (`id`), 
+				INDEX vas_api_dest_name (destinationName), 
+				INDEX vas_api_dest_id (destinationId), 
+				INDEX vas_api_dest_type (destinationType)) ENGINE = InnoDB;";
+
+			require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
+	    	dbDelta($sql);
+	    }
+	}
+	return $destination_details;
+}
+
+function vas_fetch_viator_destination_details_from_api()
+{
+	global $wpdb; global $table_prefix;
+	$method = 'v1/taxonomy/destinations';
+	$url = VAS_API_END_POINT.$method;
+	$destination_response = vas_wp_http_methods($url, 'GET');
+	// $destination_response = file_get_contents('D:/Shrikant/Magzine3-Technology/Office-material/viator/viator-destination-response.json');
+	$destination_response = json_decode($destination_response, true);
+	$table_name = $table_prefix.'vas_api_destinations';
+	if(isset($destination_response['data']) && isset($destination_response['data'][0])){
+		if(is_array($destination_response['data'])){
+			foreach ($destination_response['data'] as $dest_key => $dest_value) {
+				$insert_data['sortOrder'] = $dest_value['sortOrder'];
+				$insert_data['selectable'] = $dest_value['selectable'];
+				$insert_data['destinationUrlName'] = $dest_value['destinationUrlName'];
+				$insert_data['defaultCurrencyCode'] = $dest_value['defaultCurrencyCode'];
+				$insert_data['lookupId'] = $dest_value['lookupId'];
+				$insert_data['parentId'] = $dest_value['parentId'];
+				$insert_data['timeZone'] = $dest_value['timeZone'];
+				$insert_data['destinationName'] = strtoupper($dest_value['destinationName']);
+				$insert_data['destinationId'] = $dest_value['destinationId'];
+				$insert_data['destinationType'] = strtoupper($dest_value['destinationType']);
+				$insert_data['latitude'] = $dest_value['latitude'];
+				$insert_data['longitude'] = $dest_value['longitude'];
+				$wpdb->insert($table_name, $insert_data);	
+			}
+		}
+	}
+}
+
+function vas_get_destination_parent_details($parent_id='')
+{
+	global $wpdb; global $table_prefix; 
+	$country_details = array();
+	$table_name = $table_prefix.'vas_api_destinations';
+	if(!empty($parent_id)){
+		$destination_country_details = vas_get_destination_country_details($parent_id);
+		if(isset($destination_country_details[0]) && !empty($destination_country_details)){
+			if($destination_country_details[0]['destinationType'] == 'REGION'){
+				$destination_country_details = vas_get_destination_country_details($destination_country_details[0]['parentId']);
+				if(isset($destination_country_details[0]) && !empty($destination_country_details)){
+					if($destination_country_details[0]['destinationType'] == 'COUNTRY'){
+						$country_details = $destination_country_details[0];
+					}
+				}
+			}else if($destination_country_details[0]['destinationType'] == 'COUNTRY'){
+				$country_details = $destination_country_details[0];
+			}
+		}
+	}
+	return $country_details;
+}
+
+function vas_get_destination_country_details($parent_id='')
+{
+	global $wpdb; global $table_prefix;
+	$destination_results = array();
+	if(!empty($parent_id)){
+		$table_name = $table_prefix."vas_api_destinations";
+		$query = "SELECT * FROM $table_name WHERE destinationId=$parent_id";
+		$destination_results = $wpdb->get_results($query, ARRAY_A);
+	}
+	return $destination_results;
 }
