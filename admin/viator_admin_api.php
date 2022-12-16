@@ -13,6 +13,8 @@ define('VAS_API_CONTENT_TYPE', 'application/json;version=2.0'); // LIVE API KEY
 // define('VAS_API_END_POINT', 'https://api.sandbox.viator.com/partner/'); // TEST END POINT
 // define('VAS_API_KEY', 'bcac8986-4c33-4fa0-ad3f-75409487026c'); // TEST API KEY
 
+require_once VIATORAS_PLUGIN_DIR.'admin/vas-admin-cronjab-settings.php';
+
 /** 
  * Fetches value from uploaded CSV file 
  */
@@ -20,6 +22,7 @@ function vas_get_csv_file_data(){
 	$response['status'] = true;
 	$response['message'] = 'Success';
 	$csv_file_details = get_option('vas_data');
+	global $wpdb;
 	if(isset($csv_file_details) && !empty($csv_file_details)){
 		if(isset($csv_file_details['vas_csv_path']) && file_exists($csv_file_details['vas_csv_path'])){
 			$cols = array(); $client_csv_data = array();
@@ -50,11 +53,36 @@ function vas_get_csv_file_data(){
 			      	$i++;
 					}	
 					if(!empty($client_csv_data)){
+						// Create table to database if table doesn't exist
+						$table_name = $wpdb->prefix.'vas_uploaded_products';
+						if($wpdb->get_var("SHOW TABLES LIKE '$table_name'") != $table_name) {
+							$charset_collate = $wpdb->get_charset_collate();
+							$sql = "CREATE TABLE IF NOT EXISTS `$table_name` (
+								`id` INT(11) NOT NULL AUTO_INCREMENT , 
+								`name` VARCHAR(500) NULL , 
+								`city` VARCHAR(255) NULL , 
+								`country` VARCHAR(255) NULL , 
+								`product_code` VARCHAR(255) NULL , 
+								`flag` INT(11) NOT NULL DEFAULT '0' COMMENT '0 - Not extracted, 1 - Extracted' ,
+								PRIMARY KEY (`id`), 
+								INDEX `vpp_product_code` (`product_code`),
+								INDEX `vpp_flag` (`flag`)) $charset_collate;";
+							require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
+	    					dbDelta($sql);
+						}
+
 						$api_result = array(); $product_codes = array();
 						foreach ($client_csv_data as $ccd_key => $ccd_value) {
 							if(!empty($ccd_value['product_code'])){
-								// $product_codes[] = trim($ccd_value['product_code']);
-								vas_fetch_product_details($ccd_value['product_code']);
+								$insert_product_data = array();
+								$insert_data['name'] = trim($ccd_value['name']);
+								$insert_data['city'] = trim($ccd_value['city']);
+								$insert_data['country'] = trim($ccd_value['country']);
+								$insert_data['product_code'] = trim($ccd_value['product_code']);
+								$wpdb->insert($table_name, $insert_data);
+
+								// Make call to API and fetch product details
+								// vas_fetch_product_details($ccd_value['product_code']);
 							}	
 						}
 					}
@@ -205,9 +233,9 @@ function vas_format_product_response($product_details)
  */
 function vas_get_destination_details($destination_id='')
 {
-	global $table_prefix; global $wpdb; $destination_details = array();
+	global $wpdb; $destination_details = array();
 	if(!empty($destination_id)){
-		$table_name = $table_prefix."vas_api_destinations";
+		$table_name = $wpdb->prefix."vas_api_destinations";
 		$query = "SELECT * FROM $table_name WHERE destinationId=$destination_id";
 		$destination_results = $wpdb->get_results($query, ARRAY_A);
 		if(!empty($destination_results)){
@@ -216,27 +244,29 @@ function vas_get_destination_details($destination_id='')
 			$destination_details['destinationType'] = $destination_results[0]['destinationType'];
 			$destination_details['destinationId'] = $destination_results[0]['destinationId'];
 		}else{
-			$charset_collate = $wpdb->get_charset_collate();
-			$sql = "CREATE TABLE IF NOT EXISTS `$table_name` (
-				id INT(11) NOT NULL AUTO_INCREMENT , 
-				sortOrder INT(11) NULL , 
-				selectable TINYINT NOT NULL DEFAULT '0' , 
-				destinationUrlName VARCHAR(255) NULL , 
-				defaultCurrencyCode VARCHAR(255) NULL , 
-				lookupId VARCHAR(255) NULL , 
-				parentId INT(255) NOT NULL DEFAULT '0' , 
-				timeZone VARCHAR(255) NULL , 
-				destinationName VARCHAR(255) NOT NULL , 
-				destinationId INT(11) NOT NULL DEFAULT '0' , 
-				destinationType VARCHAR(255) NULL , 
-				latitude VARCHAR(255) NULL , 
-				longitude VARCHAR(255) NOT NULL , PRIMARY KEY (`id`), 
-				INDEX vas_api_dest_name (destinationName), 
-				INDEX vas_api_dest_id (destinationId), 
-				INDEX vas_api_dest_type (destinationType)) ENGINE = InnoDB;";
+			if($wpdb->get_var("SHOW TABLES LIKE '$table_name'") != $table_name) {
+				$charset_collate = $wpdb->get_charset_collate();
+				$sql = "CREATE TABLE IF NOT EXISTS `$table_name` (
+					id INT(11) NOT NULL AUTO_INCREMENT , 
+					sortOrder INT(11) NULL , 
+					selectable TINYINT NOT NULL DEFAULT '0' , 
+					destinationUrlName VARCHAR(255) NULL , 
+					defaultCurrencyCode VARCHAR(255) NULL , 
+					lookupId VARCHAR(255) NULL , 
+					parentId INT(255) NOT NULL DEFAULT '0' , 
+					timeZone VARCHAR(255) NULL , 
+					destinationName VARCHAR(255) NOT NULL , 
+					destinationId INT(11) NOT NULL DEFAULT '0' , 
+					destinationType VARCHAR(255) NULL , 
+					latitude VARCHAR(255) NULL , 
+					longitude VARCHAR(255) NOT NULL , PRIMARY KEY (`id`), 
+					INDEX vas_api_dest_name (destinationName), 
+					INDEX vas_api_dest_id (destinationId), 
+					INDEX vas_api_dest_type (destinationType)) ENGINE = InnoDB;";
 
-			require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
-	    	dbDelta($sql);
+				require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
+		    	dbDelta($sql);
+		    }
 	    }
 	}
 	return $destination_details;
@@ -244,13 +274,13 @@ function vas_get_destination_details($destination_id='')
 
 function vas_fetch_viator_destination_details_from_api()
 {
-	global $wpdb; global $table_prefix;
+	global $wpdb;
 	$method = 'v1/taxonomy/destinations';
 	$url = VAS_API_END_POINT.$method;
 	$destination_response = vas_wp_http_methods($url, 'GET');
 	// $destination_response = file_get_contents('D:/Shrikant/Magzine3-Technology/Office-material/viator/viator-destination-response.json');
 	$destination_response = json_decode($destination_response, true);
-	$table_name = $table_prefix.'vas_api_destinations';
+	$table_name = $wpdb->prefix.'vas_api_destinations';
 	if(isset($destination_response['data']) && isset($destination_response['data'][0])){
 		if(is_array($destination_response['data'])){
 			foreach ($destination_response['data'] as $dest_key => $dest_value) {
@@ -274,9 +304,9 @@ function vas_fetch_viator_destination_details_from_api()
 
 function vas_get_destination_parent_details($parent_id='')
 {
-	global $wpdb; global $table_prefix; 
+	global $wpdb;
 	$country_details = array();
-	$table_name = $table_prefix.'vas_api_destinations';
+	$table_name = $wpdb->prefix.'vas_api_destinations';
 	if(!empty($parent_id)){
 		$destination_country_details = vas_get_destination_country_details($parent_id);
 		if(isset($destination_country_details[0]) && !empty($destination_country_details)){
@@ -297,10 +327,10 @@ function vas_get_destination_parent_details($parent_id='')
 
 function vas_get_destination_country_details($parent_id='')
 {
-	global $wpdb; global $table_prefix;
+	global $wpdb;
 	$destination_results = array();
 	if(!empty($parent_id)){
-		$table_name = $table_prefix."vas_api_destinations";
+		$table_name = $wpdb->prefix."vas_api_destinations";
 		$query = "SELECT * FROM $table_name WHERE destinationId=$parent_id";
 		$destination_results = $wpdb->get_results($query, ARRAY_A);
 	}

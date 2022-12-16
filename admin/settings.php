@@ -3,8 +3,8 @@
  * Function to add menus to wordpress dashboard
  * **/
 require_once VIATORAS_PLUGIN_DIR.'admin/viator_admin_subpages.php';
-require_once VIATORAS_PLUGIN_DIR.'admin/viator_api_sync_class.php';
-require_once VIATORAS_PLUGIN_DIR.'admin/viator_woocommerce_class.php';
+require_once VIATORAS_PLUGIN_DIR.'admin/viator_admin_api.php';
+require_once VIATORAS_PLUGIN_DIR.'admin/viator_admin_woocommerce.php';
 
 add_action('admin_enqueue_scripts', 'vas_admin_script_and_styles');
 function vas_admin_script_and_styles()
@@ -54,8 +54,42 @@ if(!function_exists('vas_options_setting')){
 				}
 			}
 		}
+
+		global $wpdb;
+		$total_product = 0;
+		$table_name = $wpdb->prefix."vas_uploaded_products";
+		$query = "SELECT count(id) as product_count FROM $table_name";
+		$query_result = $wpdb->get_results($query, ARRAY_A);
+		if(isset($query_result[0]) && isset($query_result[0]['product_count'])){
+			$total_product = $query_result[0]['product_count'];
+		}
+
+		$total_imported_product = 0;
+		$table_name = $wpdb->prefix."vas_uploaded_products";
+		$query = "SELECT count(id) as imported_product FROM $table_name WHERE flag=1";
+		$query_result = $wpdb->get_results($query, ARRAY_A);
+		if(isset($query_result[0]) && isset($query_result[0]['imported_product'])){
+			$total_imported_product = $query_result[0]['imported_product'];
+		}
 	?>
 		<div class="wrap vas-tab-content">
+			<?php 
+			$style_green = "color: #fff !important; width: 100%; display: inline-block; text-align: center; background-color: #2271b1 !important; height: 30px; display: inline-block;";
+			if($total_product != 0){
+				if($total_imported_product != 0){
+					$progress_bar_width = $total_imported_product / $total_product;
+					$progress_bar_width = ceil($progress_bar_width * 100);
+					$progress_bar_width = esc_attr(strval($progress_bar_width));
+
+					$style_green = "color: #fff !important; background-color: #4caf50 !important; width: $progress_bar_width"."%; height: 30px; display: inline-block; text-align: center";
+				} 
+			?>
+				<div style="color: #000 !important; background-color: #f1f1f1 !important;height: 30px;">
+				  <div style="<?php echo $style_green; ?>"><?= $total_imported_product ?> Products Imported Out Of <?= $total_product ?></div>
+				</div><br>
+			<?php 
+			}
+			?>
 			<form method="post" action="" enctype='multipart/form-data'>
 				<div class="vas_settings_div">
 					<h3><?php echo esc_html__('Upload CSV', 'viator_api_sync') ?></h3>
@@ -73,6 +107,5 @@ if(!function_exists('vas_options_setting')){
 			</form>
 		</div>	
 	<?php
-	// vas_get_csv_file_data();
 	}
 }

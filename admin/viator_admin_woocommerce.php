@@ -8,20 +8,25 @@
 
 function vas_add_external_product($product_details)
 {
-    // echo "<pre>product_details===== "; print_r($product_details); die;
     $external_product = new WC_Product_External();
-    $slug = 'vas-'.$product_details['productCode'];
+    $slug = $product_details['productCode'];
     $external_product->set_name($product_details['title']);
     $external_product->set_slug($slug);
     $external_product->set_description($product_details['description']);
     $external_product->set_product_url($product_details['productUrl']);
     $external_product->set_button_text('Book On Viator');
     $external_product->set_category_ids($product_details['categoryId']);
-    // $external_product->set_image_id("https://media.tacdn.com/media/attractions-splice-spp-674x446/07/47/d9/70.jpg");
+    // $external_product->set_sku($product_details['productCode']);
     $external_product->save();
-    if(isset($product_details['images']) && !empty($product_details['images'])){
-        $product_code = $product_details['productCode'];
-        vas_upload_product_images($external_product->id, $product_details['images'], $product_code);
+    if(isset($external_product->id)){
+        if(isset($product_details['images']) && !empty($product_details['images'])){
+            $product_code = $product_details['productCode'];
+            vas_upload_product_images($external_product->id, $product_details['images'], $product_code);
+        }
+        // Update flag value when product updated in woocommerce
+        global $wpdb;
+        $table_name = $wpdb->prefix."vas_uploaded_products";
+        $wpdb->update($table_name, array('flag' => 1), array('product_code' => $product_details['productCode']));
     }
 }
 
